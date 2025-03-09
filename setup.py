@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="paper-helper",
     version="0.1.0",
-    packages=find_packages(),
+    packages=find_packages(include=['utils', 'utils.*', 'services', 'services.*', 'scripts', 'scripts.*']),
     install_requires=[
         "PyPDF2>=3.0.0",
         "python-magic>=0.4.27",

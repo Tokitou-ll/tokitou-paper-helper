@@ -1,13 +1,15 @@
 import os
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
 import yaml
 import json
 import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
+
+# 添加项目根目录到 Python 路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from scripts.workflow3_analyze import PaperAnalyzer
 
 class BatchProcessor:
@@ -156,8 +158,10 @@ class BatchProcessor:
                     return
             
     def generate_summary(self) -> None:
-        """生成汇总报告"""
+        """生成汇总报告和表格"""
         summary_file = Path(self.config["output"]["summary_file"])
+        # 将表格直接保存在output目录下
+        table_file = Path("output") / "summary_table.md"
         
         # 统计处理结果
         total = len(self.results) + len(self.failed_tasks)
@@ -166,58 +170,146 @@ class BatchProcessor:
         
         # 分析实现类型统计
         type_stats = {"official": 0, "unofficial": 0, "unknown": 0}
+        
+        # 生成表格内容
+        table_content = "# 论文分析汇总表\n\n"
+        table_content += "| 论文标题 | 实现类型 | 可信度 | 主要发现 | 分析时间 | 报告链接 |\n"
+        table_content += "|---------|----------|--------|----------|----------|----------|\n"
+        
         for result in self.results:
             paper_name = result["paper"]
-            report_file = Path(self.config["paths"]["output_dir"]) / f"{paper_name}_analysis.json"
+            # 修复JSON文件路径构建，处理文件名中的特殊字符
+            json_name = paper_name.replace(".pdf", "").replace(" via_a_", " via a ") + "_analysis.json"
+            report_file = Path(self.config["paths"]["output_dir"]) / json_name
+            logging.info(f"处理论文结果：{paper_name}")
+            logging.info(f"JSON文件路径：{report_file}")
             
             if report_file.exists():
-                with open(report_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    if "官方实现" in data["paper_type_analysis"]:
-                        type_stats["official"] += 1
-                    elif "非官方实现" in data["paper_type_analysis"]:
-                        type_stats["unofficial"] += 1
-                    else:
-                        type_stats["unknown"] += 1
+                try:
+                    with open(report_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        logging.info(f"成功读取JSON文件：{report_file}")
                         
-        # 生成报告
-        with open(summary_file, "w", encoding="utf-8") as f:
-            f.write("# 论文分析批处理报告\n\n")
+                        # 更新统计
+                        paper_type_analysis = data.get("paper_type_analysis", "")
+                        logging.info(f"论文类型分析内容：{paper_type_analysis}")
+                        
+                        # 提取实现类型
+                        impl_type = "未知"
+                        if "最终判定" in paper_type_analysis:
+                            type_section = paper_type_analysis.split("最终判定")[1].split("##")[0]
+                            for line in type_section.split("\n"):
+                                if "类型：" in line:
+                                    impl_type = line.split("类型：")[1].strip()
+                                    break
+                        logging.info(f"提取的实现类型：{impl_type}")
+                        
+                        if "官方实现" in impl_type:
+                            type_stats["official"] += 1
+                        elif "非官方实现" in impl_type:
+                            type_stats["unofficial"] += 1
+                        else:
+                            type_stats["unknown"] += 1
+                        
+                        # 提取可信度
+                        confidence = "低"
+                        if "最终判定" in paper_type_analysis:
+                            type_section = paper_type_analysis.split("最终判定")[1].split("##")[0]
+                            for line in type_section.split("\n"):
+                                if "可信度：" in line:
+                                    confidence = line.split("可信度：")[1].strip()
+                                    break
+                        logging.info(f"提取的可信度：{confidence}")
+                        
+                        # 提取主要发现
+                        final_report = data.get("final_report", "")
+                        findings = "无"
+                        if "关键发现" in final_report:
+                            findings_section = final_report.split("关键发现")[1].split("##")[0]
+                            findings_lines = [line.strip() for line in findings_section.split("\n") if line.strip()]
+                            if findings_lines:
+                                for line in findings_lines:
+                                    if line.startswith("1."):
+                                        findings = line[2:].strip()
+                                        break
+                        logging.info(f"提取的主要发现：{findings}")
+                        
+                        # 修改报告链接路径
+                        md_name = paper_name.replace(".pdf", "").replace(" via_a_", " via a ") + "_analysis.md"
+                        report_md = f"analysis/report/{md_name}"
+                        report_link = f"[查看报告]({report_md})"
+                        
+                        # 格式化分析时间
+                        analysis_time = data.get("analysis_time", "").split("T")[0]
+                        
+                        # 格式化表格行，确保内容不会导致表格错位
+                        # 限制每个字段的长度，使用省略号表示超出部分
+                        title = paper_name[:50] + "..." if len(paper_name) > 50 else paper_name
+                        findings = findings[:50] + "..." if len(findings) > 50 else findings
+                        
+                        table_row = f"| {title} | {impl_type} | {confidence} | {findings} | {analysis_time} | {report_link} |\n"
+                        logging.info(f"生成的表格行：{table_row}")
+                        table_content += table_row
+                        
+                except Exception as e:
+                    logging.error(f"处理论文 {paper_name} 的结果时出错：{str(e)}")
+                    logging.exception(e)
+                    type_stats["unknown"] += 1  # 如果处理JSON文件出错，计入未知类型
+                    continue
+            else:
+                logging.error(f"JSON文件不存在：{report_file}")
+                type_stats["unknown"] += 1  # 如果JSON文件不存在，计入未知类型
+                        
+        # 保存表格文件
+        try:
+            table_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(table_file, "w", encoding="utf-8") as f:
+                f.write(table_content)
+            logging.info(f"保存汇总表格到：{table_file}")
+            logging.info(f"表格内容：\n{table_content}")
+        except Exception as e:
+            logging.error(f"保存汇总表格失败：{str(e)}")
+            logging.exception(e)
             
-            f.write("## 处理概况\n")
-            f.write(f"- 总论文数：{total}\n")
-            f.write(f"- 处理成功：{success}\n")
-            f.write(f"- 处理失败：{failed}\n")
-            f.write(f"- 处理时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-            
-            f.write("## 实现类型统计\n")
-            f.write(f"- 官方实现：{type_stats['official']} ({type_stats['official']/total*100:.1f}%)\n")
-            f.write(f"- 非官方实现：{type_stats['unofficial']} ({type_stats['unofficial']/total*100:.1f}%)\n")
-            f.write(f"- 无法判定：{type_stats['unknown']} ({type_stats['unknown']/total*100:.1f}%)\n\n")
-            
-            f.write("## 分析结果汇总\n")
-            for result in self.results:
-                paper_name = result["paper"]
-                report_file = Path(self.config["paths"]["output_dir"]) / f"{paper_name}_analysis.json"
+        # 生成概述报告
+        try:
+            with open(summary_file, "w", encoding="utf-8") as f:
+                f.write("# 论文分析批处理报告\n\n")
                 
-                if report_file.exists():
-                    with open(report_file, "r", encoding="utf-8") as rf:
-                        data = json.load(rf)
-                        f.write(f"\n### {paper_name}\n")
-                        f.write(f"- 分析时间：{result['time']}\n")
-                        f.write(f"- 详细报告：[查看报告]({report_file})\n")
-                        f.write(f"- 主要发现：\n")
-                        f.write(f"  * 实现类型：{'官方实现' if '官方实现' in data['paper_type_analysis'] else '非官方实现'}\n")
-                        f.write(f"  * 可信度：{'高' if '可信度：高' in data['paper_type_analysis'] else '中' if '可信度：中' in data['paper_type_analysis'] else '低'}\n")
+                f.write("## 处理概况\n")
+                f.write(f"- 总论文数：{total}\n")
+                f.write(f"- 处理成功：{success}\n")
+                f.write(f"- 处理失败：{failed}\n")
+                f.write(f"- 处理时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                
+                f.write("## 实现类型统计\n")
+                if total > 0:
+                    processed = type_stats["official"] + type_stats["unofficial"] + type_stats["unknown"]
+                    if processed > 0:
+                        f.write(f"- 官方实现：{type_stats['official']} ({type_stats['official']/processed*100:.1f}%)\n")
+                        f.write(f"- 非官方实现：{type_stats['unofficial']} ({type_stats['unofficial']/processed*100:.1f}%)\n")
+                        f.write(f"- 无法判定：{type_stats['unknown']} ({type_stats['unknown']/processed*100:.1f}%)\n\n")
+                    else:
+                        f.write("- 暂无数据\n\n")
+                else:
+                    f.write("- 暂无数据\n\n")
+                
+                f.write(f"## 详细分析\n")
+                f.write(f"详细的分析结果请查看：[分析汇总表](summary_table.md)\n\n")
+                
+                if self.failed_tasks:
+                    f.write("\n## 处理失败列表\n")
+                    for task in self.failed_tasks:
+                        f.write(f"\n### {task['paper']}\n")
+                        f.write(f"- 错误信息：{task['error']}\n")
+                        f.write(f"- 重试次数：{task['retries']}\n")
+            logging.info(f"保存汇总报告到：{summary_file}")
+        except Exception as e:
+            logging.error(f"保存汇总报告失败：{str(e)}")
+            logging.exception(e)
             
-            if self.failed_tasks:
-                f.write("\n## 处理失败列表\n")
-                for task in self.failed_tasks:
-                    f.write(f"\n### {task['paper']}\n")
-                    f.write(f"- 错误信息：{task['error']}\n")
-                    f.write(f"- 重试次数：{task['retries']}\n")
-                    
         logging.info(f"汇总报告已生成：{summary_file}")
+        logging.info(f"汇总表格已生成：{table_file}")
         
     def run(self) -> bool:
         """运行批处理"""
