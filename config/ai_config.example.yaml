@@ -1,0 +1,38 @@
+# AI服务配置示例
+services:
+  # Grok AI服务配置
+  grok:
+    # API配置
+    api_key: "your-grok-api-key-here"  # 实际使用时替换为真实的API密钥
+    api_base: "https://api.groq.com/openai/v1"
+    
+    # 模型配置
+    model: "mixtral-8x7b-32768"  # 默认使用的模型
+    timeout: 60  # API请求超时时间（秒）
+    
+    # 默认参数配置
+    default_params:
+      temperature: 0.7  # 输出随机性，范围0-1
+      max_tokens: 2000  # 最大输出token数
+      top_p: 1.0  # 核采样阈值
+      frequency_penalty: 0.0  # 频率惩罚
+      presence_penalty: 0.0  # 存在惩罚
+    
+    # 重试配置
+    retry:
+      max_retries: 3  # 最大重试次数
+      retry_delay: 1  # 重试间隔（秒）
+      
+  # 为未来其他AI服务预留配置空间
+  # claude:
+  #   api_key: "your-claude-api-key-here"
+  #   ...
+  
+  # gpt4:
+  #   api_key: "your-openai-api-key-here"
+  #   ...
+
+# 全局配置
+global:
+  default_service: "grok"  # 默认使用的AI服务
+  log_level: "INFO"  # 日志级别 
