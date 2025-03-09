@@ -1,0 +1,16 @@
+# 批处理参数示例配置
+batch:
+  size: 5  # 每批处理的论文数量
+  timeout: 1800  # 任务超时时间（秒）
+  max_retries: 3  # 失败重试次数
+  parallel_tasks: 2  # 并行任务数
+
+# 输出设置
+output:
+  log_level: INFO
+  report_format: markdown
+
+# 错误处理
+error_handling:
+  retry_delay: 300  # 重试延迟（秒）
+  skip_on_failure: true  # 失败时是否跳过 

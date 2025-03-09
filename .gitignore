@@ -169,3 +169,14 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+.vscode
+
+# 配置文件
+config/batch_config.yaml
+config/path_config.yaml
+data/**
+ 
+output/
+
+.DS_Store
+

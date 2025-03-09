@@ -1,0 +1,10 @@
+# 路径配置示例
+paths:
+  data:
+    input: "./data/input"  # 输入数据目录
+    output: "./data/output"  # 输出数据目录
+    temp: "./data/temp"  # 临时文件目录
+  
+  logs: "./logs"  # 日志文件目录
+  
+  models: "./models"  # 模型文件目录 
